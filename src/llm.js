@@ -6,10 +6,17 @@ import {
 import {DATABASE, ENV} from './env.js';
 // eslint-disable-next-line no-unused-vars
 import {Context} from './context.js';
-import {isAzureEnable, isOpenAIEnable, requestCompletionsFromOpenAI, requestImageFromOpenAI} from './openai.js';
+import {
+  isAzureEnable,
+  isOpenAIEnable,
+  requestCompletionsFromAzureOpenAI,
+  requestCompletionsFromOpenAI,
+  requestImageFromOpenAI,
+} from './openai.js';
 import {tokensCounter} from './utils.js';
-import {isWorkersAIEnable, requestCompletionsFromWorkersAI, requestImageFromWorkersAI} from './workers-ai.js';
+import {isWorkersAIEnable, requestCompletionsFromWorkersAI, requestImageFromWorkersAI} from './workersai.js';
 import {isGeminiAIEnable, requestCompletionsFromGeminiAI} from './gemini.js';
+import {isMistralAIEnable, requestCompletionsFromMistralAI} from './mistralai.js';
 
 
 /**
@@ -114,14 +121,20 @@ async function loadHistory(key, context) {
 export function loadChatLLM(context) {
   switch (context.USER_CONFIG.AI_PROVIDER) {
     case 'openai':
-    case 'azure':
       return requestCompletionsFromOpenAI;
+    case 'azure':
+      return requestCompletionsFromAzureOpenAI;
     case 'workers':
       return requestCompletionsFromWorkersAI;
     case 'gemini':
       return requestCompletionsFromGeminiAI;
+    case 'mistral':
+      return requestCompletionsFromMistralAI;
     default:
-      if (isOpenAIEnable(context) || isAzureEnable(context)) {
+      if (isAzureEnable(context)) {
+        return requestCompletionsFromAzureOpenAI;
+      }
+      if (isOpenAIEnable(context)) {
         return requestCompletionsFromOpenAI;
       }
       if (isWorkersAIEnable(context)) {
@@ -129,6 +142,9 @@ export function loadChatLLM(context) {
       }
       if (isGeminiAIEnable(context)) {
         return requestCompletionsFromGeminiAI;
+      }
+      if (isMistralAIEnable(context)) {
+        return requestCompletionsFromMistralAI;
       }
       return null;
   }
@@ -242,6 +258,11 @@ export async function chatWithLLM(text, context, modifier) {
     }
     return sendMessageToTelegramWithContext(context)(answer);
   } catch (e) {
-    return sendMessageToTelegramWithContext(context)(`Error: ${e.message}`);
+    let errMsg = `Error: ${e.message}`;
+    if (errMsg.length > 2048) { // 裁剪错误信息 最长2048
+      errMsg = errMsg.substring(0, 2048);
+    }
+    context.CURRENT_CHAT_CONTEXT.disable_web_page_preview = true;
+    return sendMessageToTelegramWithContext(context)(errMsg);
   }
 }
